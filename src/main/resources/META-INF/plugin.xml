@@ -1,0 +1,33 @@
+<idea-plugin>
+    <id>net.wukl.ruleoffour</id>
+    <name>Rule of Four</name>
+    <vendor email="luc@wukl.net" url="https://wukl.net">Luc Everse</vendor>
+
+    <description><![CDATA[
+    Applies the Rule of Four: exceptions should declare at least the four public constructors of java.lang.Exception.
+    ]]></description>
+
+    <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
+         on how to target different products -->
+    <!-- uncomment to enable plugin in all products
+    <depends>com.intellij.modules.lang</depends>
+    -->
+
+    <extensions defaultExtensionNs="com.intellij">
+        <intentionAction>
+            <className>net.wukl.ruleoffour.CreateConstructorsIntention</className>
+            <category>Declaration</category>
+            <descriptionDirectoryName>CreateConstructorsIntention</descriptionDirectoryName>
+        </intentionAction>
+    </extensions>
+
+    <project-components>
+        <component>
+            <implementation-class>net.wukl.ruleoffour.CreateConstructorsIntention</implementation-class>
+        </component>
+    </project-components>
+
+    <actions>
+        <!-- Add your actions here -->
+    </actions>
+</idea-plugin>
