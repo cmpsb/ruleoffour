@@ -1,6 +1,7 @@
 <idea-plugin>
     <id>net.wukl.ruleoffour</id>
     <name>Rule of Four</name>
+    <version>0.2.0</version>
     <vendor email="luc@wukl.net" url="https://wukl.net">Luc Everse</vendor>
 
     <description><![CDATA[
@@ -19,6 +20,9 @@
             <category>Declaration</category>
             <descriptionDirectoryName>CreateConstructorsIntention</descriptionDirectoryName>
         </intentionAction>
+        <projectConfigurable groupId="tools" displayName="Rule of Four" id="preferences.ruleoffour" instance="net.wukl.ruleoffour.config.ConfigurationPanel" />
+        <projectService serviceInterface="net.wukl.ruleoffour.config.Ro4Configuration" serviceImplementation="net.wukl.ruleoffour.config.Ro4Configuration" />
+        <localInspection displayName="Rule of Four" language="JAVA" enabledByDefault="true" level="WARNING" groupName="Error Handling" implementationClass="net.wukl.ruleoffour.ViolationInspection"/>
     </extensions>
 
     <project-components>

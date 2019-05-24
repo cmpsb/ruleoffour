@@ -2,22 +2,22 @@ package net.wukl.ruleoffour;
 
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction;
+import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.JavaPsiFacade;
-import com.intellij.psi.JavaTokenType;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementFactory;
-import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiParameter;
-import com.intellij.psi.PsiParserFacade;
 import com.intellij.psi.codeStyle.CodeStyleManager;
-import com.intellij.psi.util.InheritanceUtil;
+import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.util.IncorrectOperationException;
+import net.wukl.ruleoffour.config.Ro4Configuration;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Adds an intent that can generate the four standard constructors of an exception.
@@ -40,73 +40,136 @@ public class CreateConstructorsIntention extends PsiElementBaseIntentionAction
     @Override
     public void invoke(@NotNull final Project project, final Editor editor,
                        @NotNull final PsiElement element) throws IncorrectOperationException {
-        final PsiClass type = this.getDeclaredClass(element);
+        final PsiClass type = Utils.getDeclaredClass(element);
         if (type == null) {
             throw new IncorrectOperationException("Class does not qualify");
         }
 
-        final String humanName = this.humanizeName(element.getText());
+        final Ro4Configuration config = ServiceManager.getService(project, Ro4Configuration.class);
 
-        final PsiMethod[] existingCtors = type.getConstructors();
-        final PsiMethod firstExistingCtor;
-        if (existingCtors.length > 0) {
-            firstExistingCtor = existingCtors[0];
+        final String className = element.getText();
+        final String docName = config.isExactNameInDocEnabled()
+                ? " " + className
+                : this.humanizeName(className);
+
+        final PsiMethod[] existingMethods = type.getMethods();
+        final PsiMethod firstExistingMethod;
+        if (existingMethods.length > 0) {
+            firstExistingMethod = existingMethods[0];
         } else {
-            firstExistingCtor = null;
+            firstExistingMethod = null;
         }
 
         final PsiElementFactory fact = JavaPsiFacade.getElementFactory(project);
-        final PsiParserFacade psi = PsiParserFacade.SERVICE.getInstance(project);
 
-        final PsiParameter msgPar = fact.createParameterFromText("final String message", null);
-        final PsiParameter causePar = fact.createParameterFromText("final Throwable cause", null);
+        final StringBuilder msgParBuilder = new StringBuilder();
+        final StringBuilder causeParBuilder = new StringBuilder();
+
+        if (config.isFinalParamsEnabled()) {
+            msgParBuilder.append("final ");
+            causeParBuilder.append("final ");
+        }
+
+        if (config.isNullableParamsEnabled()) {
+            msgParBuilder.append("@Nullable ");
+            causeParBuilder.append("@Nullable ");
+        }
+
+        msgParBuilder.append("String message");
+        causeParBuilder.append(config.isExceptionAsCauseEnabled() ? "Exception" : "Throwable");
+        causeParBuilder.append(" cause");
+
+        final PsiParameter msgPar = fact.createParameterFromText(msgParBuilder.toString(), null);
+        final PsiParameter causePar = fact.createParameterFromText(causeParBuilder.toString(), null);
 
         final CodeStyleManager stylist = CodeStyleManager.getInstance(project);
 
         for (int i = 0; i < 4; ++i) {
-            final PsiMethod ctor = fact.createConstructor(element.getText());
-
-            final StringBuilder superBuilder = new StringBuilder("{ super(");
-            final StringBuilder commentBuilder = new StringBuilder(
-                    "/**\n* Creates a new" + humanName + ".\n"
+            final PsiElement ctor = this.genConstructor(
+                    fact,
+                    className,
+                    docName,
+                    (i & 1) == 1 ? msgPar : null,
+                    (i & 2) == 2 ? causePar : null,
+                    config
             );
 
-            if (i > 0) {
-                commentBuilder.append("* \n");
-            }
-
-            if ((i & 1) == 1) {
-                superBuilder.append("message");
-                commentBuilder.append(
-                    "* @param message the detail message explaining what caused the exception\n"
-                );
-                ctor.getParameterList().add(msgPar.copy());
-            }
-
-            if (i == 3) {
-                superBuilder.append(", ");
-            }
-
-            if ((i & 2) == 2) {
-                superBuilder.append("cause");
-                commentBuilder.append("* @param cause the exception that caused this exception\n");
-                ctor.getParameterList().add(causePar.copy());
-            }
-
-            superBuilder.append("); }");
-            commentBuilder.append("*/");
-
-            ctor.getBody().replace(fact.createStatementFromText(superBuilder.toString(), null));
-            ctor.addBefore(
-                    fact.createDocCommentFromText(commentBuilder.toString()),
-                    ctor.getFirstChild()
-            );
-
-            final PsiMethod formattedCtor = (PsiMethod) stylist.reformat(ctor);
-            formattedCtor.addBefore(psi.createWhiteSpaceFromText(" "), formattedCtor.getBody());
-
-            type.addBefore(formattedCtor, firstExistingCtor);
+            type.addBefore(stylist.reformat(ctor), firstExistingMethod);
         }
+
+        if (config.isNullableParamsEnabled()) {
+            final JavaCodeStyleManager javaStylist = JavaCodeStyleManager.getInstance(project);
+            javaStylist.optimizeImports(element.getContainingFile());
+        }
+    }
+
+    /**
+     * Generates an exception constnuctor.
+     *
+     * @param fact the PSI element factory to build new elements with
+     * @param className the name of the class to generate constructors for
+     * @param docName the name to use in the documentation
+     * @param msgPar the element to add as a message parameter, if not {@code null}
+     * @param causePar the element to add as a cause parameter, if not {@code null}
+     * @param config the plugin configuration instance to get settings from
+     *
+     * @return the constructor element
+     */
+    private PsiElement genConstructor(
+            final @NotNull PsiElementFactory fact,
+            final @NotNull String className,
+            final @NotNull String docName,
+            final @Nullable PsiParameter msgPar,
+            final @Nullable PsiParameter causePar,
+            final @NotNull Ro4Configuration config
+    ) {
+        final PsiMethod ctor = fact.createConstructor(className);
+
+        final StringBuilder superBuilder = new StringBuilder("super(");
+        final StringBuilder commentBuilder = new StringBuilder(
+                "/**\n* Creates a new" + docName + ".\n"
+        );
+
+        final boolean isFirst = msgPar != null || causePar != null;
+
+        if (isFirst) {
+            commentBuilder.append("* \n");
+        }
+
+        if (msgPar != null) {
+            superBuilder.append("message");
+            commentBuilder.append(
+                    "* @param message the message explaining what caused the exception\n"
+            );
+            ctor.getParameterList().add(msgPar.copy());
+        }
+
+        if (msgPar != null && causePar != null) {
+            superBuilder.append(", ");
+        }
+
+        if (causePar != null) {
+            superBuilder.append("cause");
+            commentBuilder.append("* @param cause the exception that caused this exception\n");
+            ctor.getParameterList().add(causePar.copy());
+        }
+
+        superBuilder.append(");");
+        commentBuilder.append("*/");
+
+        PsiElement body = ctor.getBody();
+        assert body != null : "Generated constructor has no body";
+
+        if (!isFirst || config.isEmptySuperEnabled()) {
+            body.add(fact.createStatementFromText(superBuilder.toString(), null));
+        }
+
+        if (config.isJavadocEnabled()) {
+            final String doc = commentBuilder.toString();
+            ctor.addBefore(fact.createDocCommentFromText(doc), ctor.getFirstChild());
+        }
+
+        return ctor;
     }
 
     /**
@@ -120,43 +183,32 @@ public class CreateConstructorsIntention extends PsiElementBaseIntentionAction
      * @return true if the intention is available, false otherwise.
      */
     @Override
-    public boolean isAvailable(@NotNull final Project project, final Editor editor,
-                               @NotNull final PsiElement element) {
-        if (!element.isWritable()) {
-            return false;
-        }
-
-        final PsiClass type = this.getDeclaredClass(element);
-
-        if (!InheritanceUtil.isInheritor(type, "java.lang.Exception")) {
-            return false;
-        }
-
-        return element.getText().endsWith("Exception");
+    public boolean isAvailable(
+            final @Nullable Project project,
+            final @Nullable Editor editor,
+            final @NotNull PsiElement element
+    ) {
+        return Utils.isApplicable(element);
     }
 
-    private PsiClass getDeclaredClass(@NotNull final PsiElement element) {
-        if (!(element instanceof PsiJavaToken)) {
-            return null;
-        }
-
-        final PsiJavaToken token = (PsiJavaToken) element;
-        if (token.getTokenType() != JavaTokenType.IDENTIFIER) {
-            return null;
-        }
-
-        if (!(token.getParent() instanceof PsiClass)) {
-            return null;
-        }
-
-        return (PsiClass) token.getParent();
-    }
-
-    private String humanizeName(final String name) {
+    /**
+     * Converts a class name to "human" form.
+     *
+     * "Human" form means that the class name is split at the capitals and converted to lower case.
+     *
+     * @param name the name to convert
+     *
+     * @return the humanized name
+     */
+    @NotNull
+    private String humanizeName(final @NotNull String name) {
         final String splitName = name.replaceAll("([A-Z])", " $1");
         return splitName.toLowerCase();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean startInWriteAction() {
         return true;
