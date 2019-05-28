@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>net.wukl.ruleoffour</id>
     <name>Rule of Four</name>
-    <version>0.2.0</version>
+    <version>0.2.1</version>
     <vendor email="luc@wukl.net" url="https://wukl.net">Luc Everse</vendor>
 
     <description><![CDATA[
@@ -34,4 +34,6 @@
     <actions>
         <!-- Add your actions here -->
     </actions>
+
+    <depends>com.intellij.modules.java</depends>
 </idea-plugin>
