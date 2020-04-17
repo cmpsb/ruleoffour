@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'net.wukl'
-version '0.2.4'
+version '0.2.5'
 
 sourceCompatibility = 1.8
 
@@ -22,7 +22,7 @@ dependencies {
 
 intellij {
     plugins = ['java']
-    version '2019.3.2'
+    version '2020.+'
 }
 patchPluginXml {
     changeNotes ''
